@@ -56,8 +56,10 @@
     </div>
 
     <script id="worker-script" type="text/worker-javascript">
+        // Importa a biblioteca para ler arquivos XLSX
         self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 
+        // Função para parsear datas (executada dentro do worker)
         function parseDate(dateString) {
             if (!dateString) return null;
             if (dateString instanceof Date) return !isNaN(dateString.getTime()) ? dateString : null;
@@ -74,6 +76,7 @@
             return !isNaN(isoDate.getTime()) ? isoDate : null;
         }
         
+        // Função para parsear números no formato brasileiro (executada dentro do worker)
         function parseBrazilianNumber(value) {
             if (typeof value === 'number') return value;
             if (typeof value !== 'string' || !value) return 0;
@@ -92,10 +95,11 @@
             return isNaN(number) ? 0 : number;
         }
 
+        // Função para ler o conteúdo de um arquivo (executada dentro do worker)
         const readFile = (file) => {
             return new Promise((resolve, reject) => {
                 if (!file) {
-                    resolve([]);
+                    resolve([]); // Resolve with empty array if no file is provided
                     return;
                 }
                 const reader = new FileReader();
@@ -148,6 +152,7 @@
             });
         };
 
+        // Função principal de processamento de dados de vendas (executada dentro do worker)
         const processSalesData = (rawData, clientMap, productMasterMap) => {
             return rawData.map(rawRow => {
                 const clientInfo = clientMap.get(String(rawRow['CODCLI'])) || {};
@@ -178,7 +183,6 @@
                     CODUSUR: codUsur, CODCLI: String(rawRow['CODCLI'] || ''), CLIENTE_NOME: clientInfo.nomeCliente || 'N/A',
                     CIDADE: clientInfo.cidade || 'N/A', BAIRRO: clientInfo.bairro || 'N/A',
                     QTVENDA: qtVenda, VLVENDA: parseBrazilianNumber(rawRow['VLVENDA']),
-                    PRCMEDIO: parseBrazilianNumber(rawRow['PRCMEDIO']),
                     TOTPESOLIQ: parseBrazilianNumber(rawRow['TOTPESOLIQ']), DTPED: dtPed, DTSAIDA: dtSaida, 
                     POSICAO: String(rawRow['POSICAO'] || ''),
                     FILIAL: String(rawRow['FILIAL'] || ''),
@@ -189,6 +193,7 @@
             });
         };
 
+        // Event listener que aguarda mensagens da página principal
         self.onmessage = async (event) => {
             const { salesFile, clientsFile, productsFile, historyFile } = event.data;
 
@@ -416,21 +421,21 @@
         const cityView = document.getElementById('city-view');
         const weeklyView = document.getElementById('weekly-view');
         const comparisonView = document.getElementById('comparison-view');
-        const stockView = document.getElementById('stock-view');
+        const stockView = document.getElementById('stock-view'); // NOVA VIEW
         
         const showWeeklyBtn = document.getElementById('show-weekly-btn');
         const showCityBtn = document.getElementById('show-city-btn');
         const backToMainFromCityBtn = document.getElementById('back-to-main-from-city-btn');
         const backToMainFromWeeklyBtn = document.getElementById('back-to-main-from-weekly-btn');
         const backToMainFromComparisonBtn = document.getElementById('back-to-main-from-comparison-btn');
-        const backToMainFromStockBtn = document.getElementById('back-to-main-from-stock-btn');
+        const backToMainFromStockBtn = document.getElementById('back-to-main-from-stock-btn'); //NOVO
 
         const totalVendasEl = document.getElementById('total-vendas');
         const totalPesoEl = document.getElementById('total-peso');
         const viewChartBtn = document.getElementById('viewChartBtn');
         const viewTableBtn = document.getElementById('viewTableBtn');
         const viewComparisonBtn = document.getElementById('viewComparisonBtn');
-        const viewStockBtn = document.getElementById('viewStockBtn');
+        const viewStockBtn = document.getElementById('viewStockBtn'); // NOVO BOTAO
         const chartView = document.getElementById('chartView');
         const tableView = document.getElementById('tableView');
         const faturamentoBtn = document.getElementById('faturamentoBtn');
@@ -504,7 +509,17 @@
         const weeklyComparisonChartContainer = document.getElementById('weeklyComparisonChartContainer');
         const monthlyComparisonChartContainer = document.getElementById('monthlyComparisonChartContainer');
         
-        const filialFilter = document.getElementById('filial-filter');
+        // NOVOS ELEMENTOS DA TELA DE ESTOQUE
+        const stockFilialFilter = document.getElementById('stock-filial-filter');
+        const stockSupplierFilterBtn = document.getElementById('stock-supplier-filter-btn');
+        const stockSupplierFilterText = document.getElementById('stock-supplier-filter-text');
+        const stockSupplierFilterDropdown = document.getElementById('stock-supplier-filter-dropdown');
+        const stockProductFilterBtn = document.getElementById('stock-product-filter-btn');
+        const stockProductFilterText = document.getElementById('stock-product-filter-text');
+        const stockProductFilterDropdown = document.getElementById('stock-product-filter-dropdown');
+        const clearStockFiltersBtn = document.getElementById('clear-stock-filters-btn');
+        const stockAnalysisTableBody = document.getElementById('stock-analysis-table-body');
+
 
         const modal = document.getElementById('order-details-modal');
         const modalCloseBtn = document.getElementById('modal-close-btn');
@@ -538,6 +553,8 @@
         let selectedComparisonSellers = [];
         let selectedComparisonSuppliers = [];
         let selectedComparisonProducts = [];
+        let selectedStockSuppliers = []; // NOVO
+        let selectedStockProducts = []; // NOVO
         let historicalBests = {};
         let selectedHolidays = [];
         
@@ -951,7 +968,6 @@
             comparisonSupervisorFilter.value = ''; 
             currentComparisonFornecedor = ''; 
             comparisonCityFilter.value = ''; 
-            filialFilter.value = 'ambas';
             selectedComparisonSellers = [];
             selectedComparisonSuppliers = [];
             selectedComparisonProducts = [];
@@ -967,6 +983,17 @@
             updateAllComparisonFilters();
             updateComparisonView();
         }
+
+        // NOVA FUNÇÃO PARA RESETAR FILTROS DE ESTOQUE
+        function resetStockFilters() {
+            stockFilialFilter.value = 'ambas';
+            selectedStockSuppliers = [];
+            selectedStockProducts = [];
+            updateStockSupplierFilter();
+            updateStockProductFilter();
+            updateStockView();
+        }
+
 
         function getRelevantClientsForCityFilter() {
             let clients = [...allClientsData];
@@ -1231,7 +1258,7 @@
             else showNoDataMessage('mixChart', 'Sem dados para o ranking.');
         }
 
-        function updateSupplierFilter(dropdown, filterText, selectedArray, dataSource) {
+        function updateSupplierFilter(dropdown, filterText, selectedArray, dataSource, filterType = 'comparison') {
             const suppliers = new Map();
             dataSource.forEach(s => { if(s.CODFOR && s.FORNECEDOR) suppliers.set(s.CODFOR, s.FORNECEDOR); });
             const sortedSuppliers = [...suppliers.entries()].sort((a, b) => a[1].localeCompare(b[1]));
@@ -1241,7 +1268,7 @@
             dropdown.innerHTML = '';
             sortedSuppliers.forEach(([cod, name]) => {
                 const isChecked = selectedArray.includes(cod);
-                dropdown.innerHTML += `<label class="flex items-center p-2 hover:bg-slate-600 cursor-pointer"><input type="checkbox" class="form-checkbox h-4 w-4 bg-slate-800 border-slate-500 rounded text-teal-500 focus:ring-teal-500" value="${cod}" ${isChecked ? 'checked' : ''}><span class="ml-2 text-xs">${cod} - ${name}</span></label>`;
+                dropdown.innerHTML += `<label class="flex items-center p-2 hover:bg-slate-600 cursor-pointer"><input type="checkbox" data-filter-type="${filterType}" class="form-checkbox h-4 w-4 bg-slate-800 border-slate-500 rounded text-teal-500 focus:ring-teal-500" value="${cod}" ${isChecked ? 'checked' : ''}><span class="ml-2 text-xs">${cod} - ${name}</span></label>`;
             });
 
             if (selectedArray.length === 0 || selectedArray.length === sortedSuppliers.length) {
@@ -1267,58 +1294,6 @@
             }
         }
         
-        function getPositiveClientsWithNewLogic(salesData, pasta) {
-            const salesByClient = new Map();
-            salesData.forEach(sale => {
-                if (!sale.CODCLI) return;
-                const clientTotal = salesByClient.get(sale.CODCLI) || 0;
-                salesByClient.set(sale.CODCLI, clientTotal + sale.VLVENDA);
-            });
-
-            let positiveClients = 0;
-            const threshold = pasta === 'PEPSICO' ? 50 : (pasta === 'MULTIMARCAS' ? 1 : 0);
-
-            for (const total of salesByClient.values()) {
-                if (total > threshold) {
-                    positiveClients++;
-                }
-            }
-            return positiveClients;
-        }
-
-        function getMonthlyPositiveClientsCountWithNewLogic(salesData, pasta) {
-            const salesByMonthByClient = {};
-
-            salesData.forEach(sale => {
-                if (!sale.CODCLI) return;
-                const saleDate = parseDate(sale.DTPED);
-                if (saleDate) {
-                    const monthKey = `${saleDate.getFullYear()}-${saleDate.getMonth()}`;
-                    if (!salesByMonthByClient[monthKey]) {
-                        salesByMonthByClient[monthKey] = new Map();
-                    }
-                    const clientSales = salesByMonthByClient[monthKey].get(sale.CODCLI) || 0;
-                    salesByMonthByClient[monthKey].set(sale.CODCLI, clientSales + sale.VLVENDA);
-                }
-            });
-
-            let totalPositiveClientsSum = 0;
-            const threshold = pasta === 'PEPSICO' ? 50 : (pasta === 'MULTIMARCAS' ? 1 : 0);
-
-            for (const monthKey in salesByMonthByClient) {
-                const clientTotals = salesByMonthByClient[monthKey];
-                let positiveClientsInMonth = 0;
-                for (const total of clientTotals.values()) {
-                    if (total > threshold) {
-                        positiveClientsInMonth++;
-                    }
-                }
-                totalPositiveClientsSum += positiveClientsInMonth;
-            }
-
-            return totalPositiveClientsSum;
-        }
-
         function getSundayBasedWeeks(year, month) {
             const weeks = [];
             const firstDayOfMonth = new Date(year, month, 1);
@@ -1344,64 +1319,133 @@
                 : '';
         }
 
-        function calculateAverageMixComDevolucao(salesData, targetCodfors) {
-            if (!salesData || salesData.length === 0 || !targetCodfors || targetCodfors.length === 0) return 0;
-            const saldoPorClienteProduto = {};
+        // =================================================================
+        // ======================= FUNÇÕES CORRIGIDAS ======================
+        // =================================================================
+
+        function getPositiveClientsWithNewLogic(salesData) {
+            // CORREÇÃO: A regra de R$ 50 para Pepsico foi removida.
+            // Agora, qualquer cliente com venda líquida > R$ 1,00 é considerado atendido,
+            // independentemente da pasta (Pepsico ou Multimarcas).
+            const salesByClient = new Map();
             salesData.forEach(sale => {
-                if (!targetCodfors.includes(String(sale.CODFOR))) return;
-                if (!sale.CODCLI || !sale.PRODUTO || !sale.PEDIDO) return;
-                const key = `${sale.CODCLI}_${sale.PRODUTO}_${sale.PEDIDO}`;
-                saldoPorClienteProduto[key] = (saldoPorClienteProduto[key] || 0) + (Number(sale.QTVENDA) || 0);
+                if (!sale.CODCLI) return;
+                const clientTotal = salesByClient.get(sale.CODCLI) || 0;
+                salesByClient.set(sale.CODCLI, clientTotal + sale.VLVENDA);
             });
-            const mixPerClient = {};
-            Object.entries(saldoPorClienteProduto).forEach(([key, saldo]) => {
-                if (saldo > 1) {
-                    const [codcli, produto] = key.split('_');
-                    if (!mixPerClient[codcli]) mixPerClient[codcli] = new Set();
-                    mixPerClient[codcli].add(produto);
+
+            let positiveClients = 0;
+            const threshold = 1; // Limite de R$ 1,00 para todos
+
+            for (const total of salesByClient.values()) {
+                if (total > threshold) {
+                    positiveClients++;
                 }
-            });
-            const mixValues = Object.values(mixPerClient).map(set => set.size);
+            }
+            return positiveClients;
+        }
+
+        function calculateAverageMixComDevolucao(salesData, targetCodfors) {
+            // CORREÇÃO: A lógica agora se baseia no VALOR da venda (> R$ 1,00), não na quantidade.
+            if (!salesData || salesData.length === 0 || !targetCodfors || targetCodfors.length === 0) return 0;
+
+            // Chave: codcli, Valor: Map({Chave: produto, Valor: netValue})
+            const clientProductNetValue = new Map(); 
+
+            // Passo 1: Agrega o valor líquido das vendas por cliente/produto
+            for (const sale of salesData) {
+                if (!targetCodfors.includes(String(sale.CODFOR))) continue;
+                if (!sale.CODCLI || !sale.PRODUTO) continue;
+
+                if (!clientProductNetValue.has(sale.CODCLI)) {
+                    clientProductNetValue.set(sale.CODCLI, new Map());
+                }
+                const clientProducts = clientProductNetValue.get(sale.CODCLI);
+
+                const currentValue = clientProducts.get(sale.PRODUTO) || 0;
+                clientProducts.set(sale.PRODUTO, currentValue + (Number(sale.VLVENDA) || 0));
+            }
+
+            const mixValues = [];
+            // Passo 2: Calcula o mix para cada cliente, contando produtos com valor > R$ 1,00
+            for (const products of clientProductNetValue.values()) {
+                let positiveProductCount = 0;
+                for (const netValue of products.values()) {
+                    if (netValue > 1) { 
+                        positiveProductCount++;
+                    }
+                }
+                if (positiveProductCount > 0) {
+                    mixValues.push(positiveProductCount);
+                }
+            }
+            
             if (mixValues.length === 0) return 0;
+
             return mixValues.reduce((a, b) => a + b, 0) / mixValues.length;
         }
 
         function calculatePositivacaoPorCestaComDevolucao(salesData, requiredCategories) {
+            // CORREÇÃO: A lógica agora se baseia no VALOR da venda (> R$ 1,00), não na quantidade.
+            // Isso também deve corrigir o KPI de "Positivação Foods" que estava zerado.
             if (!salesData || salesData.length === 0 || !requiredCategories || requiredCategories.length === 0) return 0;
+
             const normalizedCategories = requiredCategories.map(normalize);
-            const saldoPorClienteProduto = {};
-            salesData.forEach(sale => {
-                if (!sale.CODCLI || !sale.DESCRICAO || !sale.PRODUTO || !sale.PEDIDO) return;
-                const key = `${sale.CODCLI}_${sale.PRODUTO}_${sale.PEDIDO}`;
-                saldoPorClienteProduto[key] = (saldoPorClienteProduto[key] || 0) + (Number(sale.QTVENDA) || 0);
-            });
-            const clientPurchases = new Map();
-            Object.entries(saldoPorClienteProduto).forEach(([key, saldo]) => {
-                if (saldo > 1) {
-                    const [codcli, produto, pedido] = key.split('_');
-                    const sale = salesData.find(s => String(s.CODCLI) === codcli && String(s.PRODUTO) === produto && String(s.PEDIDO) === pedido);
-                    if (sale) {
-                        const description = normalize(sale.DESCRICAO);
-                        normalizedCategories.forEach(category => {
-                            if (description.includes(category)) {
-                                if (!clientPurchases.has(codcli)) {
-                                    clientPurchases.set(codcli, new Set());
+            // Chave: codcli, Valor: Map({Chave: produto, Valor: {netValue: number, description: string}})
+            const clientProductNetSales = new Map(); 
+
+            // Primeira passada: agrega valor líquido e armazena a descrição
+            for (const sale of salesData) {
+                if (!sale.CODCLI || !sale.PRODUTO) continue;
+
+                if (!clientProductNetSales.has(sale.CODCLI)) {
+                    clientProductNetSales.set(sale.CODCLI, new Map());
+                }
+                const clientProducts = clientProductNetSales.get(sale.CODCLI);
+
+                if (!clientProducts.has(sale.PRODUTO)) {
+                    clientProducts.set(sale.PRODUTO, { netValue: 0, description: sale.DESCRICAO });
+                }
+                const productData = clientProducts.get(sale.PRODUTO);
+                productData.netValue += (Number(sale.VLVENDA) || 0);
+            }
+
+            // Chave: codcli, Valor: Set de categorias compradas com valor > R$ 1,00
+            const clientPurchasedCategories = new Map(); 
+
+            // Segunda passada: verifica categorias para vendas com valor de saldo positivo > R$ 1,00
+            for (const [codcli, products] of clientProductNetSales.entries()) {
+                for (const data of products.values()) {
+                    if (data.netValue > 1) { 
+                        const normalizedDescription = normalize(data.description);
+                        for (const category of normalizedCategories) {
+                            if (normalizedDescription.includes(category)) {
+                                if (!clientPurchasedCategories.has(codcli)) {
+                                    clientPurchasedCategories.set(codcli, new Set());
                                 }
-                                clientPurchases.get(codcli).add(category);
+                                clientPurchasedCategories.get(codcli).add(category);
+                                break; 
                             }
-                        });
+                        }
                     }
                 }
-            });
+            }
+
             let positivadosCount = 0;
             const requiredCategoryCount = normalizedCategories.length;
-            for (const categoriesPurchased of clientPurchases.values()) {
-                if (categoriesPurchased.size === requiredCategoryCount) {
+            // Terceira passada: conta clientes que compraram todas as categorias necessárias
+            for (const categoriesPurchased of clientPurchasedCategories.values()) {
+                if (categoriesPurchased.size >= requiredCategoryCount) {
                     positivadosCount++;
                 }
             }
+
             return positivadosCount;
         }
+
+        // =================================================================
+        // ===================== FIM DAS FUNÇÕES CORRIGIDAS ==================
+        // =================================================================
 
         function groupSalesByMonth(salesData) {
             const salesByMonth = {};
@@ -1470,7 +1514,7 @@
             selectedComparisonSellers = updateSellerFilter(comparisonSupervisorFilter.value, comparisonVendedorFilterDropdown, comparisonVendedorFilterText, selectedComparisonSellers, sellerOptionsData);
 
             const supplierOptionsData = getComparisonFilteredData({ excludeFilter: 'supplier' }).historySales;
-            selectedComparisonSuppliers = updateSupplierFilter(comparisonSupplierFilterDropdown, comparisonSupplierFilterText, selectedComparisonSuppliers, supplierOptionsData);
+            selectedComparisonSuppliers = updateSupplierFilter(comparisonSupplierFilterDropdown, comparisonSupplierFilterText, selectedComparisonSuppliers, supplierOptionsData, 'comparison');
             
             updateComparisonProductFilter();
 
@@ -1488,16 +1532,12 @@
             multimarcasBtn.classList.toggle('opacity-50', !hasMultimarcas);
         }
 
-
-        function updateComparisonProductFilter() {
-            const dropdown = comparisonProductFilterDropdown;
-            const filterText = comparisonProductFilterText;
-            const searchInput = document.getElementById('comparison-product-search-input');
-            const listContainer = document.getElementById('comparison-product-list');
+        function updateProductFilter(dropdown, filterText, selectedArray, dataSource, filterType = 'comparison') {
+            const searchInput = dropdown.querySelector('input[type="text"]');
+            const listContainer = dropdown.querySelector('div[id$="-list"]');
             const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
 
-            const productsData = getComparisonFilteredData({ excludeFilter: 'product' }).historySales;
-            const products = [...new Map(productsData.map(s => [s.PRODUTO, s.DESCRICAO])).entries()].sort((a,b) => a[1].localeCompare(b[1]));
+            const products = [...new Map(dataSource.map(s => [s.PRODUTO, s.DESCRICAO])).entries()].sort((a,b) => a[1].localeCompare(b[1]));
 
             const filteredProducts = searchTerm.length > 0 
                 ? products.filter(([code, name]) =>
@@ -1507,26 +1547,39 @@
 
             listContainer.innerHTML = '';
             filteredProducts.forEach(([code, name]) => {
-                const isChecked = selectedComparisonProducts.includes(code);
+                const isChecked = selectedArray.includes(code);
                 listContainer.innerHTML += `
                     <label class="flex items-center p-2 hover:bg-slate-600 cursor-pointer">
-                        <input type="checkbox" class="form-checkbox h-4 w-4 bg-slate-800 border-slate-500 rounded text-teal-500 focus:ring-teal-500" value="${code}" ${isChecked ? 'checked' : ''}>
+                        <input type="checkbox" data-filter-type="${filterType}" class="form-checkbox h-4 w-4 bg-slate-800 border-slate-500 rounded text-teal-500 focus:ring-teal-500" value="${code}" ${isChecked ? 'checked' : ''}>
                         <span class="ml-2 text-xs">(${code}) ${name}</span>
                     </label>`;
             });
 
-            if (selectedComparisonProducts.length === 0) {
+            if (selectedArray.length === 0) {
                 filterText.textContent = 'Todos os Produtos';
-            } else if (selectedComparisonProducts.length === 1) {
+            } else if (selectedArray.length === 1) {
                 const productsInfo = new Map(products);
-                filterText.textContent = productsInfo.get(selectedComparisonProducts[0]) || '1 selecionado';
+                filterText.textContent = productsInfo.get(selectedArray[0]) || '1 selecionado';
             } else {
-                filterText.textContent = `${selectedComparisonProducts.length} produtos selecionados`;
+                filterText.textContent = `${selectedArray.length} produtos selecionados`;
             }
         }
+        
+        function updateComparisonProductFilter() {
+             updateProductFilter(comparisonProductFilterDropdown, comparisonProductFilterText, selectedComparisonProducts, getComparisonFilteredData({ excludeFilter: 'product' }).historySales, 'comparison');
+        }
+        
+        function updateStockProductFilter() {
+             updateProductFilter(stockProductFilterDropdown, stockProductFilterText, selectedStockProducts, allSalesData, 'stock');
+        }
 
-        function getActiveStockMap() {
-            const filterValue = filialFilter.value;
+        function updateStockSupplierFilter() {
+            selectedStockSuppliers = updateSupplierFilter(stockSupplierFilterDropdown, stockSupplierFilterText, selectedStockSuppliers, allSalesData, 'stock');
+        }
+
+
+        function getActiveStockMap(filial) {
+            const filterValue = filial || stockFilialFilter.value;
             if (filterValue === '05') {
                 return stockData05;
             }
@@ -1544,37 +1597,36 @@
             const filteredData = getComparisonFilteredData();
             const { currentSales, historySales } = filteredData;
             
-            const historyTotalFat = historySales.reduce((sum, item) => sum + item.VLVENDA, 0);
-            const currentTotalFat = currentSales.reduce((sum, item) => sum + item.VLVENDA, 0);
-            const historyTotalPeso = historySales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
-            const currentTotalPeso = currentSales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
-            
-            const pasta = currentComparisonFornecedor;
-            const currentClients = getPositiveClientsWithNewLogic(currentSales, pasta);
-            const historyClientsTotalPerMonthSum = getMonthlyPositiveClientsCountWithNewLogic(historySales, pasta);
-
             const historyMonthsCount = getUniqueMonthCount(historySales);
-            const historyClientsAverage = historyMonthsCount > 0 ? historyClientsTotalPerMonthSum / historyMonthsCount : 0;
-            
+
+            // --- Current Period KPIs ---
+            const currentTotalFat = currentSales.reduce((sum, item) => sum + item.VLVENDA, 0);
+            const currentTotalPeso = currentSales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
+            const currentClients = getPositiveClientsWithNewLogic(currentSales);
             const currentTicket = currentClients > 0 ? currentTotalFat / currentClients : 0;
-            const historyTicketAverage = historyClientsTotalPerMonthSum > 0 ? historyTotalFat / historyClientsTotalPerMonthSum : 0;
-            
             const pepsicoCodfors = ['707', '708'];
             const saltyCategories = ['CHEETOS', 'DORITOS', 'FANDANGOS', 'RUFFLES', 'TORCIDA'];
-            const foodsCategories = ['TODDY', 'TODDYNHO', 'QUAKER', 'KEROCOCO'];
-
+            const foodsCategories = ['TODDYNHO', 'TODDY', 'QUAKER', 'KEROCOCO'];
             const currentMixPepsico = calculateAverageMixComDevolucao(currentSales, pepsicoCodfors);
-            const historyMixPepsico = monthlyKpiAverage(historySales, calculateAverageMixComDevolucao, pepsicoCodfors);
-
             const currentPositivacaoSalty = calculatePositivacaoPorCestaComDevolucao(currentSales, saltyCategories);
-            const historyPositivacaoSalty = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, saltyCategories);
-
             const currentPositivacaoFoods = calculatePositivacaoPorCestaComDevolucao(currentSales, foodsCategories);
+
+            // --- History Period KPIs (using monthly averages for consistency) ---
+            const historyTotalFat = historySales.reduce((sum, item) => sum + item.VLVENDA, 0);
+            const historyTotalPeso = historySales.reduce((sum, item) => sum + item.TOTPESOLIQ, 0);
+
+            const historyAvgFat = historyMonthsCount > 0 ? historyTotalFat / historyMonthsCount : 0;
+            const historyAvgPeso = historyMonthsCount > 0 ? historyTotalPeso / 1000 / historyMonthsCount : 0;
+            
+            const historyClientsAverage = monthlyKpiAverage(historySales, getPositiveClientsWithNewLogic);
+            const historyTicketAverage = historyClientsAverage > 0 ? historyAvgFat / historyClientsAverage : 0;
+            const historyMixPepsico = monthlyKpiAverage(historySales, calculateAverageMixComDevolucao, pepsicoCodfors);
+            const historyPositivacaoSalty = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, saltyCategories);
             const historyPositivacaoFoods = monthlyKpiAverage(historySales, calculatePositivacaoPorCestaComDevolucao, foodsCategories);
 
-            renderKpiCards('comparison-kpi-container', [ 
-                { title: 'Faturamento Total', current: currentTotalFat, history: historyTotalFat / historyMonthsCount, format: 'currency' }, 
-                { title: 'Peso Total (Ton)', current: currentTotalPeso / 1000, history: historyTotalPeso / 1000 / historyMonthsCount, format: 'decimal' }, 
+            renderKpiCards([ 
+                { title: 'Faturamento Total', current: currentTotalFat, history: historyAvgFat, format: 'currency' }, 
+                { title: 'Peso Total (Ton)', current: currentTotalPeso / 1000, history: historyAvgPeso, format: 'decimal' }, 
                 { title: 'Clientes Atendidos', current: currentClients, history: historyClientsAverage, format: 'integer' }, 
                 { title: 'Ticket Médio', current: currentTicket, history: historyTicketAverage, format: 'currency' },
                 { title: 'Mix por PDV (Pepsico)', current: currentMixPepsico, history: historyMixPepsico, format: 'mix' },
@@ -1938,39 +1990,102 @@
             Object.keys(supervisorComparison).forEach(sup => supervisorComparison[sup].history /= historyMonthsCount);
             const supervisorTableBody = document.getElementById('supervisorComparisonTableBody');
             supervisorTableBody.innerHTML = Object.entries(supervisorComparison).map(([sup, data]) => { const variation = data.history > 0 ? ((data.current - data.history) / data.history) * 100 : (data.current > 0 ? 100 : 0); const colorClass = variation > 0 ? 'text-green-400' : variation < 0 ? 'text-red-400' : 'text-slate-400'; return `<tr class="hover:bg-slate-700"><td class="px-4 py-2">${sup}</td><td class="px-4 py-2 text-right">${data.history.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td class="px-4 py-2 text-right">${data.current.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td class="px-4 py-2 text-right ${colorClass}">${variation.toFixed(2)}%</td></tr>`; }).join('');
-
-            const productSalesCurrent = {};
-            const productSalesHistory = {};
-            currentSales.forEach(s => { if (!productSalesCurrent[s.DESCRICAO]) productSalesCurrent[s.DESCRICAO] = { value: 0, code: s.PRODUTO }; productSalesCurrent[s.DESCRICAO].value += s.QTVENDA_EMBALAGEM_MASTER; });
-            historySales.forEach(s => { if (!productSalesHistory[s.DESCRICAO]) productSalesHistory[s.DESCRICAO] = { value: 0, code: s.PRODUTO }; productSalesHistory[s.DESCRICAO].value += s.QTVENDA_EMBALAGEM_MASTER; });
-            Object.keys(productSalesHistory).forEach(prod => productSalesHistory[prod].value /= historyMonthsCount);
-            const allProducts = [...new Set([...Object.keys(productSalesCurrent), ...Object.keys(productSalesHistory)])];
-            const productChanges = []; 
-            let newProducts = []; 
-            let lostProducts = [];
-            allProducts.forEach(prod => {
-                const currentInfo = productSalesCurrent[prod] || { value: 0, code: (productSalesHistory[prod] ? productSalesHistory[prod].code : 'N/A') };
-                const historyInfo = productSalesHistory[prod] || { value: 0, code: (productSalesCurrent[prod] ? productSalesCurrent[prod].code : 'N/A') };
-                const currentVal = currentInfo.value; const historyVal = historyInfo.value;
-                const productCode = currentInfo.code !== 'N/A' ? currentInfo.code : historyInfo.code;
-                if (currentVal > 0 && historyVal > 0) productChanges.push({ product: prod, code: productCode, diff: currentVal - historyVal, current: currentVal, history: historyVal });
-                else if (currentVal > 0 && historyVal === 0) newProducts.push({ product: prod, code: productCode, current: currentVal });
-                else if (currentVal === 0 && historyVal > 0) lostProducts.push({ product: prod, code: productCode, history: historyVal });
-            });
-            
-            lostProducts = lostProducts.filter(p => (activeStockMap.get(p.code) || 0) > 0);
-
-            const growthProducts = productChanges.filter(p => p.diff > 0).sort((a,b) => b.diff - a.diff);
-            const declineProducts = productChanges.filter(p => p.diff < 0).sort((a,b) => a.diff - b.diff);
-            renderProductTable('top-growth-products-table', growthProducts, true, activeStockMap);
-            renderProductTable('top-decline-products-table', declineProducts, true, activeStockMap);
-            renderProductTable('new-products-table', newProducts.sort((a,b) => b.current - a.current), false, activeStockMap);
-            renderProductTable('lost-products-table', lostProducts.sort((a,b) => b.history - a.history), false, activeStockMap);
         }
 
-        function renderKpiCards(elementId, kpis) {
-            const container = document.getElementById(elementId);
-            if (!container) return;
+        // NOVA FUNÇÃO PARA ATUALIZAR A VIEW DE ESTOQUE
+        function updateStockView() {
+            const filial = stockFilialFilter.value;
+            const activeStockMap = getActiveStockMap(filial);
+
+            let productsToDisplay = [...new Set(allSalesData.map(p => p.PRODUTO))];
+
+            if (selectedStockSuppliers.length > 0) {
+                const productsFromSuppliers = new Set(allSalesData.filter(s => selectedStockSuppliers.includes(s.CODFOR)).map(s => s.PRODUTO));
+                productsToDisplay = productsToDisplay.filter(p => productsFromSuppliers.has(p));
+            }
+
+            if (selectedStockProducts.length > 0) {
+                productsToDisplay = productsToDisplay.filter(p => selectedStockProducts.includes(p));
+            }
+
+            const productDetails = new Map();
+            allSalesData.forEach(s => {
+                if (!productDetails.has(s.PRODUTO)) {
+                    productDetails.set(s.PRODUTO, {
+                        descricao: s.DESCRICAO,
+                        fornecedor: s.FORNECEDOR,
+                        codfor: s.CODFOR
+                    });
+                }
+            });
+
+            const historyMonthsCount = getUniqueMonthCount(allHistoryData);
+            const salesByProductHistory = {};
+            allHistoryData.forEach(s => {
+                if (!s.PRODUTO) return;
+                salesByProductHistory[s.PRODUTO] = (salesByProductHistory[s.PRODUTO] || 0) + s.QTVENDA_EMBALAGEM_MASTER;
+            });
+
+            const tableData = productsToDisplay.map(code => {
+                const details = productDetails.get(code) || {};
+                const stock = activeStockMap.get(code) || 0;
+                const avgSale = (salesByProductHistory[code] || 0) / historyMonthsCount;
+                const trendDays = avgSale > 0 ? (stock / (avgSale / 22)) : Infinity; // 22 dias úteis no mês
+
+                return {
+                    code,
+                    descricao: details.descricao || 'N/A',
+                    fornecedor: details.fornecedor || 'N/A',
+                    stock,
+                    avgSale,
+                    trendDays
+                };
+            }).sort((a, b) => a.descricao.localeCompare(b.descricao));
+
+            stockAnalysisTableBody.innerHTML = tableData.map(item => {
+                const trendText = isFinite(item.trendDays) ? `${Math.floor(item.trendDays)} dias` : 'N/A';
+                let trendColor = 'text-slate-400';
+                if (isFinite(item.trendDays)) {
+                    if (item.trendDays < 15) trendColor = 'text-red-400';
+                    else if (item.trendDays < 30) trendColor = 'text-yellow-400';
+                    else trendColor = 'text-green-400';
+                }
+
+                return `
+                    <tr class="hover:bg-slate-700/50">
+                        <td class="px-4 py-2 text-xs">(${item.code}) ${item.descricao}</td>
+                        <td class="px-4 py-2 text-xs">${item.fornecedor}</td>
+                        <td class="px-4 py-2 text-right text-xs">${item.stock.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                        <td class="px-4 py-2 text-right text-xs">${item.avgSale.toLocaleString('pt-BR', {maximumFractionDigits: 2})}</td>
+                        <td class="px-4 py-2 text-right text-xs font-bold ${trendColor}">${trendText}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            // Lógica para os gráficos da tela de estoque
+            const stockBySupplier = {};
+            tableData.forEach(item => {
+                 stockBySupplier[item.fornecedor] = (stockBySupplier[item.fornecedor] || 0) + item.stock;
+            });
+            const sortedStockBySupplier = Object.entries(stockBySupplier).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            if (sortedStockBySupplier.length > 0) {
+                 createChart('stockBySupplierChart', 'bar', sortedStockBySupplier.map(s => s[0]), sortedStockBySupplier.map(s => s[1]), { indexAxis: 'y' });
+            } else {
+                showNoDataMessage('stockBySupplierChart', 'Sem dados de estoque para exibir.');
+            }
+
+            const criticalStock = tableData.filter(p => isFinite(p.trendDays) && p.trendDays < 15).sort((a,b) => a.trendDays - b.trendDays).slice(0, 10);
+             if (criticalStock.length > 0) {
+                 createChart('criticalStockChart', 'bar', criticalStock.map(p => `(${p.code}) ${p.descricao}`), criticalStock.map(p => p.trendDays), { indexAxis: 'y', plugins: { datalabels: { formatter: (v) => `${v.toFixed(0)}d` } } });
+            } else {
+                showNoDataMessage('criticalStockChart', 'Nenhum produto em estado crítico.');
+            }
+
+        }
+
+
+        function renderKpiCards(kpis) {
+            const container = document.getElementById('comparison-kpi-container');
             
             const formatValue = (val, format) => {
                 if (format === 'currency') return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1992,43 +2107,6 @@
             }).join('');
         }
         
-        function renderProductTable(elementId, data, showVariation, stockMap) {
-            const container = document.getElementById(elementId);
-            if (!container) return;
-            
-            let secondColumnTitle = 'Vendido (Atual)';
-            if (elementId.includes('lost-products')) {
-                secondColumnTitle = 'Média Trim. (Emb.)';
-            }
-
-            let header = `<th class="px-4 py-2">Produto</th><th class="px-4 py-2 text-right">${secondColumnTitle}</th>`;
-            if (showVariation) {
-                header += '<th class="px-4 py-2 text-right">Média Trim. (Emb.)</th><th class="px-4 py-2 text-right">Variação (Emb.)</th>';
-            }
-            header += '<th class="px-4 py-2 text-right">Estoque (Emb.)</th>';
-
-            const rows = data.map(item => {
-                const productName = `(${item.code}) ${item.product}`;
-                const formatNumber = (num) => num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                const stockQty = stockMap.get(String(item.code)) || 0;
-                
-                let rowHTML = `<tr class="hover:bg-slate-700/50">
-                                <td class="px-4 py-2 text-xs">${productName}</td>
-                                <td class="px-4 py-2 text-right text-xs">${formatNumber(item.current || item.history)}</td>`;
-                
-                if (showVariation) {
-                    const variation = item.diff;
-                    const colorClass = variation > 0 ? 'text-green-400' : 'text-red-400';
-                    rowHTML += `<td class="px-4 py-2 text-right text-xs">${formatNumber(item.history)}</td>
-                                <td class="px-4 py-2 text-right text-xs ${colorClass}">${formatNumber(variation)}</td>`;
-                }
-                
-                rowHTML += `<td class="px-4 py-2 text-right text-xs">${formatNumber(stockQty)}</td></tr>`;
-                return rowHTML;
-            }).join('');
-            container.innerHTML = `<table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr>${header}</tr></thead><tbody class="divide-y divide-slate-700">${rows}</tbody></table>`;
-        }
-
         function openModal(pedidoId) {
             const orderInfo = aggregatedOrders.find(order => order.PEDIDO == pedidoId);
             const itemsDoPedido = allSalesData.filter(item => item.PEDIDO == pedidoId);
@@ -2139,11 +2217,14 @@
             viewTableBtn.addEventListener('click', () => { chartView.classList.add('hidden'); tableView.classList.remove('hidden'); viewTableBtn.classList.add('hidden'); viewChartBtn.classList.remove('hidden'); updateAllVisuals(); });
             viewChartBtn.addEventListener('click', () => { tableView.classList.add('hidden'); chartView.classList.remove('hidden'); viewChartBtn.classList.add('hidden'); viewTableBtn.classList.remove('hidden'); updateAllVisuals(); });
             viewComparisonBtn.addEventListener('click', () => { mainDashboard.classList.add('hidden'); comparisonView.classList.remove('hidden'); updateAllComparisonFilters(); updateComparisonView(); });
+            viewStockBtn.addEventListener('click', () => { mainDashboard.classList.add('hidden'); stockView.classList.remove('hidden'); updateStockView(); }); // NOVO
             showCityBtn.addEventListener('click', () => { resetMainFilters(); mainDashboard.classList.add('hidden'); cityView.classList.remove('hidden'); document.getElementById('city-view-content').classList.add('hidden'); document.getElementById('city-view-loader').classList.remove('hidden'); setTimeout(() => { populateSupervisors('city-supervisor-filter', allSalesData); selectedCitySellers = updateSellerFilter('', cityVendedorFilterDropdown, cityVendedorFilterText, selectedCitySellers, allSalesData); updateRedeFilter(cityRedeFilterDropdown, cityComRedeBtnText, selectedCityRedes, allClientsData); updateCityView(); document.getElementById('city-view-loader').classList.add('hidden'); document.getElementById('city-view-content').classList.remove('hidden'); }, 10); });
             backToMainFromCityBtn.addEventListener('click', () => { resetCityFilters(); cityView.classList.add('hidden'); mainDashboard.classList.remove('hidden'); updateAllVisuals(); });
             showWeeklyBtn.addEventListener('click', () => { resetMainFilters(); mainDashboard.classList.add('hidden'); weeklyView.classList.remove('hidden'); populateWeeklyFilters(); updateWeeklyView(); });
             backToMainFromWeeklyBtn.addEventListener('click', () => { weeklyView.classList.add('hidden'); mainDashboard.classList.remove('hidden'); currentWeeklyFornecedor = ''; updateAllVisuals(); });
             backToMainFromComparisonBtn.addEventListener('click', () => { comparisonView.classList.add('hidden'); mainDashboard.classList.remove('hidden'); updateAllVisuals(); });
+            backToMainFromStockBtn.addEventListener('click', () => { stockView.classList.add('hidden'); mainDashboard.classList.remove('hidden'); updateAllVisuals(); }); // NOVO
+            
             supervisorFilter.addEventListener('change', () => { selectedSellers = []; updateSellerFilter(supervisorFilter.value, vendedorFilterDropdown, vendedorFilterText, selectedSellers, allSalesData); updateAllVisuals(); });
             vendedorFilterBtn.addEventListener('click', () => vendedorFilterDropdown.classList.toggle('hidden'));
             vendedorFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox') { const { value, checked } = e.target; if (checked) selectedSellers.push(value); else selectedSellers = selectedSellers.filter(s => s !== value); selectedSellers = updateSellerFilter(supervisorFilter.value, vendedorFilterDropdown, vendedorFilterText, selectedSellers, allSalesData); updateAllVisuals(); } });
@@ -2230,6 +2311,8 @@
                 if (!comparisonVendedorFilterBtn.contains(e.target) && !comparisonVendedorFilterDropdown.contains(e.target)) comparisonVendedorFilterDropdown.classList.add('hidden'); 
                 if (!comparisonSupplierFilterBtn.contains(e.target) && !comparisonSupplierFilterDropdown.contains(e.target)) comparisonSupplierFilterDropdown.classList.add('hidden'); 
                 if (!comparisonProductFilterBtn.contains(e.target) && !comparisonProductFilterDropdown.contains(e.target)) comparisonProductFilterDropdown.classList.add('hidden');
+                if (!stockSupplierFilterBtn.contains(e.target) && !stockSupplierFilterDropdown.contains(e.target)) stockSupplierFilterDropdown.classList.add('hidden'); // NOVO
+                if (!stockProductFilterBtn.contains(e.target) && !stockProductFilterDropdown.contains(e.target)) stockProductFilterDropdown.classList.add('hidden'); // NOVO
                 if (e.target.closest('[data-pedido-id]')) { e.preventDefault(); openModal(e.target.closest('[data-pedido-id]').dataset.pedidoId); } 
                 if (e.target.closest('[data-codcli]')) { e.preventDefault(); openClientModal(e.target.closest('[data-codcli]').dataset.codcli); } 
                 if (e.target.closest('#city-suggestions > div')) { cityNameFilter.value = e.target.textContent; citySuggestions.classList.add('hidden'); updateCityView(); } 
@@ -2248,12 +2331,11 @@
             };
 
             comparisonSupervisorFilter.addEventListener('change', handleComparisonFilterChange);
-            filialFilter.addEventListener('change', handleComparisonFilterChange);
             comparisonVendedorFilterBtn.addEventListener('click', () => comparisonVendedorFilterDropdown.classList.toggle('hidden'));
             comparisonVendedorFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox') { const { value, checked } = e.target; if (checked) selectedComparisonSellers.push(value); else selectedComparisonSellers = selectedComparisonSellers.filter(s => s !== value); handleComparisonFilterChange(); } });
             comparisonFornecedorToggleContainer.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { const fornecedor = e.target.dataset.fornecedor; if (currentComparisonFornecedor === fornecedor) { currentComparisonFornecedor = ''; e.target.classList.remove('active'); } else { currentComparisonFornecedor = fornecedor; comparisonFornecedorToggleContainer.querySelectorAll('.fornecedor-btn').forEach(b => b.classList.remove('active')); e.target.classList.add('active'); } handleComparisonFilterChange(); } });
             comparisonSupplierFilterBtn.addEventListener('click', () => comparisonSupplierFilterDropdown.classList.toggle('hidden'));
-            comparisonSupplierFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox') { const { value, checked } = e.target; if (checked) selectedComparisonSuppliers.push(value); else selectedComparisonSuppliers = selectedComparisonSuppliers.filter(s => s !== value); handleComparisonFilterChange(); } });
+            comparisonSupplierFilterDropdown.addEventListener('change', (e) => { if (e.target.type === 'checkbox' && e.target.dataset.filterType === 'comparison') { const { value, checked } = e.target; if (checked) selectedComparisonSuppliers.push(value); else selectedComparisonSuppliers = selectedComparisonSuppliers.filter(s => s !== value); handleComparisonFilterChange(); } });
             
             comparisonComRedeBtn.addEventListener('click', () => comparisonRedeFilterDropdown.classList.toggle('hidden'));
             comparisonRedeGroupContainer.addEventListener('click', (e) => {
@@ -2297,29 +2379,70 @@
 
             clearComparisonFiltersBtn.addEventListener('click', resetComparisonFilters);
             
+            const handleProductFilterChange = (e, selectedArray) => {
+                 if (e.target.type === 'checkbox') {
+                    const { value, checked } = e.target;
+                    if (checked) {
+                        if (!selectedArray.includes(value)) selectedArray.push(value);
+                    } else {
+                        const index = selectedArray.indexOf(value);
+                        if (index > -1) selectedArray.splice(index, 1);
+                    }
+                    return true;
+                }
+                return false;
+            }
+
             comparisonProductFilterBtn.addEventListener('click', () => {
                 updateComparisonProductFilter();
                 comparisonProductFilterDropdown.classList.toggle('hidden');
             });
-
-            const debouncedProductSearch = debounce(updateComparisonProductFilter, 250);
+            const debouncedComparisonProductSearch = debounce(updateComparisonProductFilter, 250);
             comparisonProductFilterDropdown.addEventListener('input', (e) => {
                 if (e.target.id === 'comparison-product-search-input') {
-                    debouncedProductSearch();
+                    debouncedComparisonProductSearch();
+                }
+            });
+            comparisonProductFilterDropdown.addEventListener('change', (e) => {
+                if(e.target.dataset.filterType === 'comparison' && handleProductFilterChange(e, selectedComparisonProducts)) {
+                    handleComparisonFilterChange();
+                    updateComparisonProductFilter();
                 }
             });
 
-            comparisonProductFilterDropdown.addEventListener('change', (e) => {
-                if (e.target.type === 'checkbox') {
+            // NOVOS EVENT LISTENERS PARA A TELA DE ESTOQUE
+            stockFilialFilter.addEventListener('change', updateStockView);
+            clearStockFiltersBtn.addEventListener('click', resetStockFilters);
+            stockSupplierFilterBtn.addEventListener('click', () => stockSupplierFilterDropdown.classList.toggle('hidden'));
+            stockSupplierFilterDropdown.addEventListener('change', (e) => {
+                if (e.target.dataset.filterType === 'stock' && e.target.type === 'checkbox') {
                     const { value, checked } = e.target;
                     if (checked) {
-                        if (!selectedComparisonProducts.includes(value)) selectedComparisonProducts.push(value);
+                        if(!selectedStockSuppliers.includes(value)) selectedStockSuppliers.push(value);
                     } else {
-                        selectedComparisonProducts = selectedComparisonProducts.filter(code => code !== value);
+                        selectedStockSuppliers = selectedStockSuppliers.filter(s => s !== value);
                     }
-                    handleComparisonFilterChange();
+                    updateStockSupplierFilter();
+                    updateStockView();
                 }
             });
+            stockProductFilterBtn.addEventListener('click', () => {
+                updateStockProductFilter();
+                stockProductFilterDropdown.classList.toggle('hidden');
+            });
+            const debouncedStockProductSearch = debounce(updateStockProductFilter, 250);
+            stockProductFilterDropdown.addEventListener('input', (e) => {
+                if (e.target.id === 'stock-product-search-input') {
+                    debouncedStockProductSearch();
+                }
+            });
+            stockProductFilterDropdown.addEventListener('change', (e) => {
+                 if(e.target.dataset.filterType === 'stock' && handleProductFilterChange(e, selectedStockProducts)) {
+                    updateStockView();
+                    updateStockProductFilter();
+                }
+            });
+
 
             comparisonTendencyToggle.addEventListener('click', () => { 
                 useTendencyComparison = !useTendencyComparison; 
@@ -2409,6 +2532,8 @@
         updateRedeFilter(comparisonRedeFilterDropdown, comparisonComRedeBtnText, selectedComparisonRedes, allClientsData);
         
         updateAllComparisonFilters();
+        updateStockSupplierFilter(); // NOVO
+        updateStockProductFilter(); // NOVO
         
         initializeRedeFilters();
         setupEventListeners();
@@ -2476,7 +2601,7 @@
                 statusText.textContent = 'A iniciar o processamento...';
                 progressBar.style.width = '0%';
                 downloadContainer.classList.add('hidden');
-
+                
                 worker.postMessage({
                     salesFile: files.salesFile,
                     clientsFile: files.clientsFile,
@@ -2505,7 +2630,7 @@
                         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
                         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"><\/script>
                         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-                        <style> body { font-family: 'Inter', sans-serif; } ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #0f172a; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; } ::-webkit-scrollbar-corner { background: #0f172a; } .sticky-header th { position: sticky; top: 0; z-index: 10; background-color: #1e293b; } .hidden { display: none; } .metric-btn.active, .fornecedor-btn.active, .comparison-toggle-btn.active, .group-btn.active, #main-rede-group-container > div > button.active, #city-rede-group-container > div > button.active, #comparison-rede-group-container > div > button.active, #stock-rede-group-container > div > button.active { background-color: #0d9488; color: #FFF; } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; } .tooltip { position: relative; display: inline-block; cursor: pointer; } .tooltip .tooltip-text { visibility: hidden; width: 220px; background-color: #1e293b; color: #fff; border-radius: 6px; padding: 8px; position: absolute; z-index: 1001; bottom: 125%; left: 50%; margin-left: -110px; opacity: 0; transition: opacity 0.3s; pointer-events: none; } .tooltip:hover .tooltip-text { visibility: visible; opacity: 1; } .custom-scrollbar::-webkit-scrollbar { width: 8px; } .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; } .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 10px; } </style>
+                        <style> body { font-family: 'Inter', sans-serif; } ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #0f172a; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; } ::-webkit-scrollbar-corner { background: #0f172a; } .sticky-header th { position: sticky; top: 0; z-index: 10; background-color: #1e293b; } .hidden { display: none; } .metric-btn.active, .fornecedor-btn.active, .comparison-toggle-btn.active, .group-btn.active, #main-rede-group-container > div > button.active, #city-rede-group-container > div > button.active, #comparison-rede-group-container > div > button.active { background-color: #0d9488; color: #FFF; } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; } .tooltip { position: relative; display: inline-block; cursor: pointer; } .tooltip .tooltip-text { visibility: hidden; width: 220px; background-color: #1e293b; color: #fff; border-radius: 6px; padding: 8px; position: absolute; z-index: 1001; bottom: 125%; left: 50%; margin-left: -110px; opacity: 0; transition: opacity 0.3s; pointer-events: none; } .tooltip:hover .tooltip-text { visibility: visible; opacity: 1; } .custom-scrollbar::-webkit-scrollbar { width: 8px; } .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; } .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 10px; } </style>
                     </head>
                     <body class="bg-slate-900 text-slate-200 antialiased">
                         <div id="main-dashboard">
@@ -2516,7 +2641,7 @@
                                 </header>
                                 <div class="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
                                     <div id="fornecedor-toggle-container" class="w-full sm:w-auto rounded-lg p-1 flex justify-center sm:justify-start gap-2"><button data-fornecedor="PEPSICO" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">PEPSICO</button><button data-fornecedor="MULTIMARCAS" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1 sm:flex-none">MULTIMARCAS</button></div>
-                                    <div class="flex gap-2 w-full sm:w-auto"><button id="viewChartBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Ver Gráficos</button><button id="viewTableBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg hidden">Ver Tabela</button><button id="viewComparisonBtn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg">Ver Comparativo</button><button id="viewStockBtn" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-4 rounded-lg">Estoque</button></div>
+                                    <div class="flex gap-2 w-full sm:w-auto"><button id="viewChartBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Ver Gráficos</button><button id="viewTableBtn" class="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg hidden">Ver Tabela</button><button id="viewComparisonBtn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg">Ver Comparativo</button><button id="viewStockBtn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg">Estoque</button></div>
                                 </div>
                                 <div id="main-filters" class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
                                     <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
@@ -2525,7 +2650,7 @@
                                             <div id="main-rede-group-container" class="inline-flex rounded-md shadow-sm" role="group">
                                                 <button type="button" data-group="" class="group-btn active py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-l-lg hover:bg-slate-500">Todos</button>
                                                 <button type="button" data-group="com_rede" id="main-com-rede-btn" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 border-t border-b border-slate-700 flex items-center gap-2">
-                                                      <span id="main-com-rede-btn-text">Com Rede</span>
+                                                    <span id="main-com-rede-btn-text">Com Rede</span>
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                                 </button>
                                                 <button type="button" data-group="sem_rede" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-r-lg hover:bg-slate-500">Sem Rede</button>
@@ -2671,8 +2796,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end border-t border-slate-700 pt-4 mt-4">
-                                    <div><label for="filial-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Estoque Filial</label><select id="filial-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"><option value="ambas" selected>Ambas</option><option value="05">Filial 05</option><option value="08">Filial 08</option></select></div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end border-t border-slate-700 pt-4 mt-4">
                                     <div class="flex items-end"><div class="w-full"><label for="comparison-holiday-picker-btn" class="block mb-2 text-sm font-medium text-slate-400">Feriados do Mês</label><button id="comparison-holiday-picker-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left">Selecionar Feriados</button></div></div>
                                     <button id="comparison-tendency-toggle" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 rounded-lg">Calcular Tendência</button>
                                     <button id="clear-comparison-filters-btn" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg">Limpar Filtros</button>
@@ -2698,49 +2822,23 @@
                                     <div id="dailyWeeklyComparisonChartContainer" class="relative h-96"></div>
                                 </div>
                                 <div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Variação de Faturamento por Supervisor</h2><div class="overflow-x-auto" style="max-height: 40vh;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Supervisor</th><th class="px-4 py-3 text-right">Média Trim.</th><th class="px-4 py-3 text-right">Fat. Mês Atual</th><th class="px-4 py-3 text-right">Variação</th></tr></thead><tbody id="supervisorComparisonTableBody" class="divide-y divide-slate-700"></tbody></table></div></div>
-                                 <!-- TABELAS DE PRODUTOS REMOVIDAS DAQUI -->
                             </div>
                         </div>
-                        <!-- NOVA PÁGINA DE ESTOQUE -->
+                        <!-- NOVA VIEW DE ESTOQUE -->
                         <div id="stock-view" class="hidden container mx-auto p-4 sm:p-6 lg:p-8">
-                            <div class="flex justify-between items-center mb-6"><div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Análise de Estoque</p></div><button id="back-to-main-from-stock-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button></div>
+                            <div class="flex justify-between items-center mb-6">
+                                <div><h1 class="text-2xl font-bold text-white"><span style="color: #FFC000;">PRIME</span> DISTRIBUIÇÃO</h1><p class="text-lg text-slate-300 -mt-1">Análise de Estoque</p></div>
+                                <button id="back-to-main-from-stock-btn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg">Voltar ao Dashboard</button>
+                            </div>
                             <div class="mb-6 p-4 bg-slate-800 rounded-lg shadow-md">
-                                <!-- FILTROS DA PÁGINA DE ESTOQUE (CÓPIA DOS FILTROS DE COMPARATIVO) -->
-                                <div id="stock-rede-filter-wrapper" class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
-                                    <div class="relative w-full sm:w-1/2">
-                                        <label class="block mb-2 text-sm font-medium text-slate-300">Rede</label>
-                                        <div id="stock-rede-group-container" class="inline-flex rounded-md shadow-sm w-full" role="group">
-                                            <button type="button" data-group="" class="group-btn active py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-l-lg hover:bg-slate-500 flex-1">Todos</button>
-                                            <button type="button" data-group="com_rede" id="stock-com-rede-btn" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 border-t border-b border-slate-700 flex items-center justify-center gap-2 flex-1">
-                                                <span id="stock-com-rede-btn-text">Com Rede</span>
-                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                            </button>
-                                            <button type="button" data-group="sem_rede" class="group-btn py-2 px-4 text-sm font-medium text-white bg-slate-600 rounded-r-lg hover:bg-slate-500 flex-1">Sem Rede</button>
-                                        </div>
-                                        <div id="stock-rede-filter-dropdown" class="hidden absolute z-20 w-full mt-1 top-full left-0 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar text-left"></div>
-                                    </div>
-                                    <div class="w-full sm:w-1/2">
-                                        <label class="block mb-2 text-sm font-medium text-slate-300">Pasta</label>
-                                        <div id="stock-fornecedor-toggle-container" class="w-full rounded-lg p-1 flex justify-center gap-2">
-                                            <button data-fornecedor="PEPSICO" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1">PEPSICO</button>
-                                            <button data-fornecedor="MULTIMARCAS" class="fornecedor-btn bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg flex-1">MULTIMARCAS</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                                    <div>
-                                        <label for="stock-supervisor-filter" class="block mb-2 text-sm font-medium text-slate-300">Supervisor</label>
-                                        <select id="stock-supervisor-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white">
-                                            <option value="">Todos</option>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                     <div>
+                                        <label for="stock-filial-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Estoque Filial</label>
+                                        <select id="stock-filial-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white">
+                                            <option value="ambas" selected>Ambas</option>
+                                            <option value="05">Filial 05</option>
+                                            <option value="08">Filial 08</option>
                                         </select>
-                                    </div>
-                                    <div class="relative">
-                                        <label for="stock-vendedor-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Vendedor</label>
-                                        <button id="stock-vendedor-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
-                                            <span id="stock-vendedor-filter-text">Todos</span>
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
-                                        <div id="stock-vendedor-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div>
                                     </div>
                                     <div class="relative">
                                         <label for="stock-supplier-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Fornecedor</label>
@@ -2751,14 +2849,7 @@
                                         <div id="stock-supplier-filter-dropdown" class="hidden absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar"></div>
                                     </div>
                                     <div class="relative">
-                                        <label for="stock-city-filter" class="block mb-2 text-sm font-medium text-slate-300">Cidade</label>
-                                        <input type="text" id="stock-city-filter" placeholder="Digite a cidade..." class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white" autocomplete="off">
-                                        <div id="stock-city-suggestions" class="absolute z-10 w-full bg-slate-700 border border-slate-600 rounded-lg mt-1 hidden max-h-48 overflow-y-auto custom-scrollbar"></div>
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-1 mt-4">
-                                     <div class="relative">
-                                        <label for="stock-product-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Filtrar por Produto</label>
+                                        <label for="stock-product-filter-btn" class="block mb-2 text-sm font-medium text-slate-300">Produto</label>
                                         <button id="stock-product-filter-btn" class="w-full bg-slate-700 text-sm rounded-lg p-2.5 border border-slate-600 text-white text-left flex justify-between items-center">
                                             <span id="stock-product-filter-text">Todos os Produtos</span>
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2767,20 +2858,40 @@
                                             <div class="p-2 border-b border-slate-600">
                                                 <input type="text" id="stock-product-search-input" placeholder="Buscar produto..." class="bg-slate-800 text-xs rounded-lg block w-full p-2 border border-slate-600 placeholder-slate-400 text-white">
                                             </div>
-                                            <div id="stock-product-list" class="max-h-60 overflow-y-auto custom-scrollbar">
-                                            </div>
+                                            <div id="stock-product-list" class="max-h-60 overflow-y-auto custom-scrollbar"></div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end border-t border-slate-700 pt-4 mt-4">
-                                    <div><label for="stock-filial-filter" class="block mb-2 text-sm font-medium text-slate-300">Filtrar Estoque Filial</label><select id="stock-filial-filter" class="bg-slate-700 text-sm rounded-lg block w-full p-2.5 border border-slate-600 placeholder-slate-400 text-white"><option value="ambas" selected>Ambas</option><option value="05">Filial 05</option><option value="08">Filial 08</option></select></div>
                                     <button id="clear-stock-filters-btn" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-lg">Limpar Filtros</button>
                                 </div>
                             </div>
-                            <div id="stock-kpi-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
-                            <div class="grid grid-cols-1 gap-6">
-                                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Produtos com Crescimento</h2><div id="top-growth-products-table-stock" class="overflow-x-auto" style="max-height: 40vh;"></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Produtos com Queda</h2><div id="top-decline-products-table-stock" class="overflow-x-auto" style="max-height: 40vh;"></div></div></div>
-                                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Novos - Vendidos este Mês</h2><div id="new-products-table-stock" class="overflow-x-auto" style="max-height: 40vh;"></div></div><div class="bg-slate-800 p-4 rounded-lg"><h2 class="text-lg font-semibold text-white text-center mb-4">Perdidos - Não vendidos este Mês</h2><div id="lost-products-table-stock" class="overflow-x-auto" style="max-height: 40vh;"></div></div></div>
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                                <div class="lg:col-span-2 bg-slate-800 p-4 rounded-lg">
+                                    <h2 class="text-lg font-semibold text-white text-center mb-4">Análise de Estoque e Tendência de Saída</h2>
+                                    <div class="overflow-x-auto" style="max-height: 60vh;">
+                                        <table class="min-w-full text-sm text-left">
+                                            <thead class="text-xs text-slate-300 uppercase sticky-header">
+                                                <tr>
+                                                    <th class="px-4 py-3">Produto</th>
+                                                    <th class="px-4 py-3">Fornecedor</th>
+                                                    <th class="px-4 py-3 text-right">Estoque Atual (Emb.)</th>
+                                                    <th class="px-4 py-3 text-right">Venda Média Mensal (Emb.)</th>
+                                                    <th class="px-4 py-3 text-right">Tendência (Dias)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="stock-analysis-table-body" class="divide-y divide-slate-700"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="space-y-6">
+                                    <div class="bg-slate-800 p-4 rounded-lg">
+                                        <h2 class="text-lg font-semibold text-white text-center mb-4">Top 10 Estoque por Fornecedor</h2>
+                                        <div id="stockBySupplierChartContainer" class="relative h-80"></div>
+                                    </div>
+                                    <div class="bg-slate-800 p-4 rounded-lg">
+                                        <h2 class="text-lg font-semibold text-white text-center mb-4">Top 10 Produtos Críticos (Estoque Baixo)</h2>
+                                        <div id="criticalStockChartContainer" class="relative h-80"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div id="order-details-modal" class="modal-overlay hidden"><div class="bg-slate-800 rounded-lg shadow-2xl max-w-4xl w-full m-4"><div class="p-6 border-b border-slate-700 flex justify-between items-center"><h2 class="text-xl font-bold text-white">Detalhes do Pedido <span id="modal-pedido-id"></span></h2><button id="modal-close-btn" class="text-slate-400 hover:text-white text-3xl">&times;</button></div><div id="modal-header-info" class="p-6 text-left grid grid-cols-2 md:grid-cols-3 gap-4 text-sm"></div><div class="custom-scrollbar" style="max-height: 50vh; overflow-y: auto;"><table class="min-w-full text-sm text-left"><thead class="text-xs text-slate-300 uppercase sticky-header"><tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3 text-right">Quantidade</th><th class="px-4 py-3 text-right">Peso (Kg)</th><th class="px-4 py-3 text-right">Valor Unitário</th></tr></thead><tbody id="modal-table-body" class="divide-y divide-slate-700"></tbody></table></div><div id="modal-footer-total" class="p-6 border-t border-slate-700 flex justify-between items-center"></div></div></div>
@@ -2818,5 +2929,4 @@
         });
     </script>
 </body>
-</ht
-                                                   
+</html>
